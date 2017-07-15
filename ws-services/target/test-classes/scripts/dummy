@@ -1,0 +1,12 @@
+# process common variables
+. ./common
+
+_URL="${_HOST}/dcmws/dummy?authToken=$_TOKEN"
+
+echo ""
+echo "Calling:" ${_URL} 
+echo ""
+
+_RES=`curl -k -X GET ${_URL}`
+echo ""
+echo "RESULT: $_RES"

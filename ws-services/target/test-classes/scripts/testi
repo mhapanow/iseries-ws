@@ -1,0 +1,19 @@
+if [ $# -ne 0 ]; then 
+   echo -e "Usage:\n\t$0\n"
+   exit 1;
+fi
+
+# process common variables
+. ./common
+
+_URL="${_HOST}/ws/testi"
+_DATA="{"firstName":"Matias_Alex","lastName":"Hapanowicz","num1":123,"num2":12.3344}"
+
+echo ""
+echo "Calling:" ${_URL} 
+echo ""
+
+_RES=`curl -k -X POST -H "Content-Type:application/json" -d ${_DATA} ${_URL}`
+echo ""
+echo "RESULT: $_RES"
+

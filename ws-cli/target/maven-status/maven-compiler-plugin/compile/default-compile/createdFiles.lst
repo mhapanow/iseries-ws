@@ -1,0 +1,8 @@
+org/dcm/services/cli/TestConsumer.class
+org/dcm/services/cli/TestServiceOutput.class
+org/dcm/services/cli/AbstractCLI.class
+org/dcm/services/jetty/JettyServer.class
+org/dcm/services/cli/StartServer.class
+org/dcm/services/cli/TestConnection.class
+org/dcm/services/cli/CLI.class
+org/dcm/services/cli/CLI$1.class

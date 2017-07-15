@@ -1,0 +1,52 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+
+	<parent>
+		<groupId>com.ciessa</groupId>
+		<artifactId>ws</artifactId>
+		<version>0.1</version>
+	</parent>
+
+	<artifactId>ws-cli</artifactId>
+	<packaging>jar</packaging>
+
+	<name>iSeries Web Services Interface CLI Utilities</name>
+	<url>http://maven.apache.org</url>
+
+	<properties>
+		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+	</properties>
+
+	<organization>
+		<name>CIES Sistemas S.A.</name>
+		<url>http://www.ciessa.com</url>
+	</organization>
+
+	<build>
+		<plugins>
+			<plugin>
+				<artifactId>maven-compiler-plugin</artifactId>
+				<configuration>
+					<source>1.6</source>
+					<target>1.6</target>
+				</configuration>
+			</plugin>
+			<plugin>
+				<artifactId>maven-release-plugin</artifactId>
+				<version>2.0-beta-7</version>
+				<configuration>
+					<tagBase>http://development.inodes-it.com/svn/repos/com.inodes.util/tags</tagBase>
+				</configuration>
+			</plugin>
+		</plugins>
+	</build>
+
+	<dependencies>
+		<dependency>
+			<groupId>com.ciessa</groupId>
+			<artifactId>ws-services</artifactId>
+			<version>0.1</version>
+		</dependency>
+	</dependencies>
+
+</project>
