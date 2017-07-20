@@ -1,5 +1,8 @@
 package org.dcm.services.impl;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
 import java.nio.charset.Charset;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -9,11 +12,13 @@ import java.sql.Statement;
 import org.dcm.services.exception.DCMException;
 import org.dcm.services.exception.DCMExceptionHelper;
 import org.dcm.services.model.SystemConfiguration;
+import org.jasypt.encryption.pbe.StandardPBEStringEncryptor;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import com.ibm.as400.access.AS400;
 import com.ibm.as400.access.DataQueue;
 import com.ibm.as400.access.KeyedDataQueue;
+import com.inodes.util.FileLoader;
 
 public class ConnectionHelperImpl {
 
@@ -41,19 +46,21 @@ public class ConnectionHelperImpl {
 			if( isConnected())
 				return;
 			
+			String password = getCredentials();
+			
             // Create an AS400 object for the server that has the data queue.
-			connection = new AS400(systemConfiguration.getiSeriesServer(), systemConfiguration.getiSeriesUser(), systemConfiguration.getiSeriesPass());
+			connection = new AS400(systemConfiguration.getiSeriesServer(), systemConfiguration.getiSeriesUser(), password);
 
 			connection.setSystemName(systemConfiguration.getiSeriesServer());
 			connection.setUserId(systemConfiguration.getiSeriesUser());
-			connection.setPassword(systemConfiguration.getiSeriesPass());
+			connection.setPassword(password);
 			
 			connection.connectService(0);
 			
 			Class.forName("com.ibm.as400.access.AS400JDBCDriver");
 
 			url = "jdbc:as400://" + systemConfiguration.getiSeriesServer() + ";user="
-					+ systemConfiguration.getiSeriesUser() + ";password=" + systemConfiguration.getiSeriesPass() + ";";
+					+ systemConfiguration.getiSeriesUser() + ";password=" + password + ";";
 			connObject = DriverManager.getConnection(url);
 			connObject.setAutoCommit(true);
 
@@ -63,6 +70,23 @@ public class ConnectionHelperImpl {
 		}
 	}
 
+	public String getCredentials() throws IOException {
+
+		String credentialsfile = FileLoader.getResource("credentials", FileLoader.PRECEDENCE_SYSTEMPATH).getFile();
+		File credentials = new File(credentialsfile);
+		FileInputStream fis = new FileInputStream(credentials);
+		byte[] b = new byte[1024];
+		int len = fis.read(b);
+		fis.close();
+		String encrypted = new String(b, 0, len);
+		
+		StandardPBEStringEncryptor encryptor = new StandardPBEStringEncryptor();
+		encryptor.setPassword("ws400");
+		
+		String decripted = encryptor.decrypt(encrypted);
+		return decripted;
+	}
+	
 	/**
 	 * Disconnects an iSeries instance
 	 * 

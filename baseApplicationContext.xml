@@ -24,13 +24,12 @@
 
 	    <property name="iSeriesServer" value="development.ciessa.com" />
 	    <property name="iSeriesUser" value="MHAPANOWIC" />
-	    <property name="iSeriesPass" value="T0STEALTH0" />
 	    <property name="DTAQLib" value="ZWXLIB" />
 	    <property name="dataLib" value="ZWXLIB" />
 	    <property name="InDTAQName" value="ZWXINDQ" />
 	    <property name="OutDTAQName" value="ZWXOUTDQ" />
-	    <property name="ServerInDTAQName" value="ZWXINSQ" />
-	    <property name="ServerOutDTAQName" value="ZWXOUTSQ" />
+	    <property name="serverInDTAQName" value="ZWXINSQ" />
+	    <property name="serverOutDTAQName" value="ZWXOUTSQ" />
 	    <property name="defPath" value="/opt/ws/" />
 	    <property name="charset" value="CP284" />
 	    <property name="consumers" value="5" />
