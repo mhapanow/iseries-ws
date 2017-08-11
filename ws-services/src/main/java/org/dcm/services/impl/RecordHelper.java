@@ -101,9 +101,35 @@ public class RecordHelper {
 				
 				val = new StringBuffer();
 				
-				if( json.has(fd.getJsonName())) {
+				JSONObject myJson = new JSONObject(json.toString());
+				String fieldName = fd.getJsonName();
+				
+				if( fieldName.contains(".")) {
+					String parts[] = fieldName.split("\\.");
+
+					if( parts[0].contains("[")) {
+						String sParts[] = parts[0].split("\\[");
+						sParts[1] = sParts[1].substring(0, sParts[1].length() -1);
+						int index = Integer.valueOf(sParts[1]);
+						if( myJson.has(sParts[0])) {
+							try {
+								myJson = myJson.getJSONArray(sParts[0]).getJSONObject(index);
+								fieldName = parts[1];
+							} catch( Exception e) {}
+						}
+					} else {
+
+						if( myJson.has(parts[0])) {
+
+							myJson = myJson.getJSONObject(parts[0]);
+							fieldName = parts[1];
+						}
+					}
+				}
+				
+				if( myJson.has(fieldName)) {
 					if( fd.getType().equals("CHAR")) {
-						String sv = json.getString(fd.getJsonName());
+						String sv = myJson.getString(fieldName);
 						if( sv.length() > fd.getLength()) {
 							val.append(sv.substring(0, fd.getLength()));
 						} else {
@@ -113,7 +139,7 @@ public class RecordHelper {
 							}
 						}
 					} else {
-						Double sv = json.getDouble(fd.getJsonName());
+						Double sv = myJson.getDouble(fieldName);
 						for( int i = 0; i < fd.getDecimals(); i++ ) {
 							sv = sv * 10;
 						}

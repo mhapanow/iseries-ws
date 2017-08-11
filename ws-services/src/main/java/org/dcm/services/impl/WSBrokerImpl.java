@@ -12,7 +12,6 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.Semaphore;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -33,11 +32,14 @@ import org.dcm.services.exception.DCMException;
 import org.dcm.services.exception.DCMExceptionHelper;
 import org.dcm.services.model.FieldDescriptor;
 import org.dcm.services.model.RecordDescriptor;
+import org.dcm.services.model.SystemConfiguration;
 import org.dcm.services.model.WSDescriptor;
 import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import com.google.gson.Gson;
+import com.ibm.as400.access.AS400;
+import com.ibm.as400.access.ConnectionDroppedException;
 import com.ibm.as400.access.DataQueue;
 import com.ibm.as400.access.DataQueueEntry;
 import com.ibm.as400.access.IFSFileInputStream;
@@ -48,112 +50,137 @@ public class WSBrokerImpl {
 
 	private static final Logger log = Logger.getLogger(WSBrokerImpl.class.getName());
 	private static Map<String, WSDescriptor> wsCache;
-	private static final Semaphore sem = new Semaphore(1);
-	
+
 	@Autowired
 	private ConnectionHelperImpl conn;
-	
+
+	@Autowired
+	private SystemConfiguration systemConfiguration;
+
+	public WSBrokerImpl() {
+		super();
+	}
+
+	public WSBrokerImpl( ConnectionHelperImpl conn, SystemConfiguration systemConfiguration ) {
+		this.conn = conn;
+		this.systemConfiguration = systemConfiguration;
+	}
+
+
 	public synchronized static WSDescriptor getCachedService(String serviceName) {
 		try {
-			sem.acquire();
-			
 			if( wsCache == null )
 				wsCache = CollectionFactory.createMap();
-			
+
 			return wsCache.get(serviceName);
-			
+
 		} catch( Exception e ) {
 			log.log(Level.SEVERE, e.getMessage(), e);
 			return null;
-		} finally { 
-			sem.release();
 		}
 	}
-	
+
 	public synchronized static void setCachedService(String serviceName, WSDescriptor descriptor) {
 		try {
-			sem.acquire();
-			
 			if( wsCache == null )
 				wsCache = CollectionFactory.createMap();
-			
+
 			wsCache.put(serviceName, descriptor);
-			
+
 		} catch( Exception e ) {
 			log.log(Level.SEVERE, e.getMessage(), e);
-		} finally { 
-			sem.release();
 		}
 	}
-	
+
 	public void startConsumer() throws DCMException {
-		
-		try {
 
-			DataQueue inputDQ = conn.getInputDataQueue();
-			KeyedDataQueue outputDQ = conn.getOutputDataQueue();
-			RecordDescriptor inputFormat = getInputRecordDescriptor();
-			RecordDescriptor outputFormat = getOutputRecordDescriptor();
+		boolean retry = true;
+		while( retry ) {
+			try {
 
-			log.log(Level.INFO, "Waiting for record...");
-			DataQueueEntry DQData = inputDQ.read(-1);
-			while( true ) {
+				conn.connect();
 
-				// We just read an entry off the queue.  Put the data into
-                // a record object so the program can access the fields of
-                // the data by name.  The Record object will also convert
-                // the data from server format to Java format.
-				String data = DQData.getString();
-				System.out.println(data);
-				JSONObject json = RecordHelper.toJson(inputFormat, data);
-				
-                String serviceName = json.getString("serviceName");
-                String key = json.getString("key");
-                String parameters = json.getString("parameters");
+				DataQueue inputDQ = conn.getInputDataQueue();
+				KeyedDataQueue outputDQ = conn.getOutputDataQueue();
+				RecordDescriptor inputFormat = getInputRecordDescriptor();
+				RecordDescriptor outputFormat = getOutputRecordDescriptor();
 
-                log.log(Level.INFO, "Message received for service " + serviceName.trim() + " and key " + key.trim());
-                log.log(Level.INFO, "Parameters: " + parameters.trim());
-        		JSONObject response = new JSONObject();
+				log.log(Level.INFO, "Waiting for record...");
+				DataQueueEntry DQData = inputDQ.read(60);
+				while( true ) {
 
-        		try {
-        			WSDescriptor ws = getWSUsingName(serviceName.trim());
-        			log.log(Level.INFO, "Web Service definition is " + ws.toString());
+					// We just read an entry off the queue.  Put the data into
+					// a record object so the program can access the fields of
+					// the data by name.  The Record object will also convert
+					// the data from server format to Java format.
+					if( DQData != null ) {
+						String data = DQData.getString();
+						System.out.println(data);
+						JSONObject json = RecordHelper.toJson(inputFormat, data);
 
-        			// Executes the actual step
-        			StringBuffer stdout = new StringBuffer();
-        			StringBuffer stderr = new StringBuffer();
-        			StringBuffer commandLine = new StringBuffer();
-        			Map<String, Object> parsedParameters = RecordHelper.toMap(ws.getInputRecordDescriptor(), parameters); 
-//        			int rcode = executeCurlOutgoingService(ws, parsedParameters, stdout, stderr, commandLine);
-        			int rcode = executeHttpOutgoingService(ws, parsedParameters, stdout, stderr, commandLine);
+						String serviceName = json.getString("serviceName");
+						String key = json.getString("key");
+						String parameters = json.getString("parameters");
 
-        			if( rcode == 0 || rcode == 200 ) {
-        				String responseString = parseResponse(ws.getOutputRecordDescriptor(), stdout.toString());
-        				response.put("responseCode", "WSR0200");
-        				response.put("responseText", responseString);
-        			} else {
-        				response.put("responseCode", "WSR0500");
-        				response.put("responseText", "");
-        			}
-        		} catch( Exception e ) {
-        			log.log(Level.SEVERE, e.getMessage(), e);
-        			response.put("responseCode", "WSR0500");
-        			response.put("responseText", e.getMessage());
-        		}
+						log.log(Level.INFO, "Message received for service " + serviceName.trim() + " and key " + key.trim());
+						log.log(Level.INFO, "Parameters: " + parameters.trim());
+						JSONObject response = new JSONObject();
 
-                String outputData = RecordHelper.fromJson(outputFormat, response);
-                log.log(Level.INFO, "Sending response to key " + key.trim() + " with data " + response.toString());
-                outputDQ.write(key, outputData.trim());
-                
-                // Wait for the next entry.
-    			log.log(Level.INFO, "Waiting for record...");
-                DQData = inputDQ.read(-1);
+						try {
+							WSDescriptor ws;
+
+							log.log(Level.INFO, "Recovering WS Definition");
+							ws = getWSUsingName(serviceName.trim());
+
+							log.log(Level.INFO, "Web Service definition is " + ws.toString());
+
+							// Executes the actual step
+							StringBuffer stdout = new StringBuffer();
+							StringBuffer stderr = new StringBuffer();
+							StringBuffer commandLine = new StringBuffer();
+							Map<String, Object> parsedParameters = RecordHelper.toMap(ws.getInputRecordDescriptor(), parameters); 
+							int rcode = executeHttpOutgoingService(ws, parsedParameters, stdout, stderr, commandLine);
+
+							if( rcode == 0 || rcode == 200 ) {
+								String responseString = parseResponse(ws.getOutputRecordDescriptor(), stdout.toString());
+								response.put("responseCode", "WSR0200");
+								response.put("responseText", responseString);
+							} else {
+								response.put("responseCode", "WSR0500");
+								response.put("responseText", "");
+							}
+						} catch( Throwable e ) {
+							log.log(Level.SEVERE, e.getMessage(), e);
+							response.put("responseCode", "WSR0500");
+							response.put("responseText", e.getMessage());
+						}
+
+						String outputData = RecordHelper.fromJson(outputFormat, response);
+						log.log(Level.INFO, "Sending response to key " + key.trim() + " with data " + response.toString());
+						outputDQ.write(key, outputData.trim());
+					}
+
+					if(!conn.isConnected())
+						conn.connect();
+
+					// Wait for the next entry.
+					log.log(Level.INFO, "Waiting for record...");
+					DQData = inputDQ.read(60);
+				}
+
+			} catch( ConnectionDroppedException e ) {
+				conn.disconnect();
+				retry = true;
+			} catch( Exception e ) {
+				log.log(Level.SEVERE, e.getMessage(), e);
+				conn.disconnect();
+				retry = true;
+				try {
+					Thread.sleep(10000);
+				} catch( Exception e1 ) {}
 			}
-			
-		} catch( Exception e ) {
-			throw DCMExceptionHelper.defaultException(e.getMessage(), e);
 		}
-		
+
 	}
 
 	/**
@@ -175,7 +202,7 @@ public class WSBrokerImpl {
 			RecordDescriptor outputFormat = getServerOutputRecordDescriptor();
 			String key = UUID.randomUUID().toString();
 			String general = "*GENERAL  ";
-			
+
 			JSONObject input = new JSONObject();
 			String inputRecord = RecordHelper.fromJson(ws.getInputRecordDescriptor(), parameters);
 			input.put("serviceName", ws.getName());
@@ -304,8 +331,12 @@ public class WSBrokerImpl {
 							|| cached.getUpdateDateTime().before(lastUpdate)) {
 						try {
 							log.log(Level.INFO, "Recovering service definition from IFS....");
+
+							// Creates alternate connection
+							AS400 conn2 = conn.getAlternateConnection();
+
 							IFSFileInputStream ifs = null;
-							ifs = new IFSFileInputStream(conn.getConnection(), conn.getDefPath() + name.trim(), IFSFileInputStream.SHARE_NONE);
+							ifs = new IFSFileInputStream(conn2, conn.getDefPath() + name.trim(), IFSFileInputStream.SHARE_NONE);
 
 							// Read the first 64K bytes from the source file.
 							int bytesRead = ifs.read(buffer);
@@ -319,6 +350,7 @@ public class WSBrokerImpl {
 							}
 
 							ifs.close();
+							conn2.disconnectAllServices();
 
 							res = new Gson().fromJson(data, WSDescriptor.class);
 							res.setName(rs.getString("DFNAME").trim());
@@ -361,7 +393,7 @@ public class WSBrokerImpl {
 			throw DCMExceptionHelper.defaultException(e.getMessage(), e);
 		}
 	}
-	
+
 	/**
 	 * Executes a specific chain step command and returns its results
 	 * 
@@ -391,9 +423,9 @@ public class WSBrokerImpl {
 						if( i != 0 ) commandLine.append(" ");
 						commandLine.append(cmd[i]);
 					}
-					
+
 					log.log(Level.INFO, "Executing command line: " + commandLine.toString());
-					
+
 					ProcessBuilder processBuilder = new ProcessBuilder(cmd);
 					Process process = processBuilder.start();
 
@@ -544,12 +576,17 @@ public class WSBrokerImpl {
 			// Execute the service
 			log.log(Level.INFO, "Executing request " + request.getRequestLine());
 			String responseBody = httpclient.execute(request, responseHandler);
+
+			log.log(Level.INFO, "Returned status code was: " + respCode.get("status"));
+			if( systemConfiguration.isLogFull()) {
+				System.out.println(responseBody);
+			}
+
 			stdout.append(responseBody);
 			commandLine.append(request.getRequestLine());
 			return respCode.get("status");
 
 		} catch( Exception e ) {
-		
 			try {
 				ByteArrayOutputStream os = new ByteArrayOutputStream();
 				PrintStream writer = new PrintStream(os);
@@ -632,7 +669,7 @@ public class WSBrokerImpl {
 	 * @return The replaced string
 	 */
 	public String replaceString(String needle, String haystack, String replaceWord) {
-		
+
 		StringBuffer sb = new StringBuffer();
 		int fromIndex = 0;
 		int index = 0;
@@ -659,7 +696,7 @@ public class WSBrokerImpl {
 	 * @throws DCMException
 	 */
 	public String parseResponse(RecordDescriptor rd, String inputString) throws DCMException {
-		
+
 		try {
 			JSONObject json = new JSONObject(inputString);
 			String response = RecordHelper.fromJson(rd, json);

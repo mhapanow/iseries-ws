@@ -8,6 +8,7 @@ import javax.servlet.ServletException;
 import javax.servlet.http.HttpServlet;
 
 import org.dcm.services.exception.DCMException;
+import org.dcm.services.impl.ConnectionHelperImpl;
 import org.dcm.services.impl.WSBrokerImpl;
 import org.dcm.services.model.SystemConfiguration;
 import org.springframework.context.ApplicationContext;
@@ -24,8 +25,7 @@ public class InitAppServlet extends HttpServlet {
 		
 		try {
 			ApplicationContext context = WebApplicationContextUtils.getWebApplicationContext(this.getServletContext());
-			final WSBrokerImpl broker = (WSBrokerImpl)context.getBean("ws.broker");
-			SystemConfiguration systemConfiguration = (SystemConfiguration)context.getBean("system.configuration");
+			final SystemConfiguration systemConfiguration = (SystemConfiguration)context.getBean("system.configuration");
 			
 			// Starts all consumers
 			for( int i = 0; i < systemConfiguration.getConsumers(); i++ ) {
@@ -33,6 +33,8 @@ public class InitAppServlet extends HttpServlet {
 					@Override
 					public void run() {
 						try {
+							ConnectionHelperImpl conn = new ConnectionHelperImpl(systemConfiguration);
+							WSBrokerImpl broker = new WSBrokerImpl(conn, systemConfiguration);
 							broker.startConsumer();
 						} catch( DCMException e ) {
 							log.log(Level.SEVERE, e.getMessage(), e);

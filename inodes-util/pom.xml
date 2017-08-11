@@ -3,7 +3,7 @@
 
 	<parent>
 		<groupId>com.ciessa</groupId>
-		<artifactId>dcmws</artifactId>
+		<artifactId>ws</artifactId>
 		<version>0.1</version>
 	</parent>
 

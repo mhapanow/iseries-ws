@@ -21,6 +21,8 @@ public class SystemConfiguration implements Serializable {
 	private String defPath;
 	private String charset;
 	private int consumers;
+	private boolean logFull = true;
+	
 	public int getAuthTokenValidityInDays() {
 		return authTokenValidityInDays;
 	}
@@ -110,6 +112,12 @@ public class SystemConfiguration implements Serializable {
 	}
 	public void setConsumers(int consumers) {
 		this.consumers = consumers;
+	}
+	public boolean isLogFull() {
+		return logFull;
+	}
+	public void setLogFull(boolean logFull) {
+		this.logFull = logFull;
 	}
 
 }

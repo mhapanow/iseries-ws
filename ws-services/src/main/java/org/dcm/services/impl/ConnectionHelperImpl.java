@@ -7,6 +7,7 @@ import java.nio.charset.Charset;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Statement;
 
 import org.dcm.services.exception.DCMException;
@@ -32,6 +33,15 @@ public class ConnectionHelperImpl {
     private KeyedDataQueue serverOutputDtaq = null;
     private String url = null;
     private java.sql.Connection connObject = null; 
+    private long connectedOn = 0L;
+    
+    public ConnectionHelperImpl() {
+		super();
+	}
+    
+    public ConnectionHelperImpl(SystemConfiguration systemConfiguration) {
+    	this.systemConfiguration = systemConfiguration;
+    }
     
 	/**
 	 * Connects an iSeries instance
@@ -64,6 +74,28 @@ public class ConnectionHelperImpl {
 			connObject = DriverManager.getConnection(url);
 			connObject.setAutoCommit(true);
 
+			connectedOn = System.currentTimeMillis();
+			
+		} catch( Exception e ) {
+			throw DCMExceptionHelper.defaultException(e.getMessage(), e);
+		}
+	}
+	
+	public AS400 getAlternateConnection() throws DCMException {
+		
+		try {
+			String password = getCredentials();
+
+			// Create an AS400 object for the server that has the data queue.
+			AS400 conn2 = new AS400(systemConfiguration.getiSeriesServer(), systemConfiguration.getiSeriesUser(), password);
+
+			conn2.setSystemName(systemConfiguration.getiSeriesServer());
+			conn2.setUserId(systemConfiguration.getiSeriesUser());
+			conn2.setPassword(password);
+
+			conn2.connectService(0);
+
+			return conn2;
 			
 		} catch( Exception e ) {
 			throw DCMExceptionHelper.defaultException(e.getMessage(), e);
@@ -94,9 +126,6 @@ public class ConnectionHelperImpl {
 	 */
 	public void disconnect() throws DCMException {
 		try {
-			if( !isConnected())
-				return;
-			
 			connection.disconnectAllServices();
 			inputDtaq = null;
 			outputDtaq = null;
@@ -131,6 +160,11 @@ public class ConnectionHelperImpl {
 		try {
 			if( connection == null )
 				return false;
+			
+			if( connection.isConnected() && ((System.currentTimeMillis() - connectedOn) > 300000)) {
+				disconnect();
+				return false;
+			}
 			
 			return connection.isConnected();
 		} catch( Exception e ) {
@@ -236,8 +270,14 @@ public class ConnectionHelperImpl {
 	public Statement getJDBCStatement() throws DCMException {
 		try {
 			return getJDBCConnection().createStatement(ResultSet.TYPE_SCROLL_SENSITIVE, ResultSet.CONCUR_READ_ONLY);
-		} catch( Exception e ) {
-			throw DCMExceptionHelper.defaultException(e.getMessage(), e);
+		} catch( SQLException e ) {
+			try {
+				disconnect();
+				connect();
+				return getJDBCConnection().createStatement(ResultSet.TYPE_SCROLL_SENSITIVE, ResultSet.CONCUR_READ_ONLY);
+			} catch( Exception e1 ) {
+				throw DCMExceptionHelper.defaultException(e.getMessage(), e);
+			}
 		}
 	}
 
