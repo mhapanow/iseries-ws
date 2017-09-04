@@ -149,7 +149,11 @@ public class RecordHelper {
 								val.append("0");
 							val.append(sv1);
 						} else {
-							val.append(sv1.substring(sv1.length() - fd.getLength() -1));
+							if( sv1.length() == fd.getLength()) {
+								val.append(sv1.substring(sv1.length() - fd.getLength()));
+							} else {
+								val.append(sv1.substring(sv1.length() - fd.getLength() -1));
+							}
 						}
 					}
 					
