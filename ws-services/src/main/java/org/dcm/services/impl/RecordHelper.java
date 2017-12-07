@@ -129,7 +129,14 @@ public class RecordHelper {
 				
 				if( myJson.has(fieldName)) {
 					if( fd.getType().equals("CHAR")) {
-						String sv = myJson.getString(fieldName);
+						String sv = null;
+						// boolean patch for cases when the value is not enclosed in ""
+						try {
+							sv = myJson.getString(fieldName);
+						} catch( Exception e ) {
+							Boolean bsv = myJson.getBoolean(fieldName);
+							sv = bsv.toString(); 
+						}
 						if( sv.length() > fd.getLength()) {
 							val.append(sv.substring(0, fd.getLength()));
 						} else {
