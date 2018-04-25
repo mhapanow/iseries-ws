@@ -8,13 +8,15 @@ import org.dcm.services.exception.DCMException;
 import org.dcm.services.exception.DCMExceptionHelper;
 import org.dcm.services.impl.WSBrokerImpl;
 import org.dcm.services.model.WSDescriptor;
-import org.json.JSONObject;
 import org.restlet.ext.json.JsonRepresentation;
 import org.restlet.resource.Delete;
 import org.restlet.resource.Get;
 import org.restlet.resource.Post;
 import org.restlet.resource.Put;
 import org.springframework.beans.factory.annotation.Autowired;
+
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 
 /**
  * This is a dummy service made as a place holder for certain old API URLs
@@ -62,17 +64,35 @@ public class GeneralBzServiceJSONImpl extends RestBaseServerResource {
 				throw DCMExceptionHelper.invalidArgumentsException(serviceName);
 			
 			// Parameters join
-			JSONObject obj = entity != null ? entity.getJsonObject() : new JSONObject();
+			
+			JsonParser jsonParser = new JsonParser();
+			
+			
+			
+			JsonObject obj = entity != null ? jsonParser.parse(entity.getJsonArray().toString()).getAsJsonObject() : new JsonObject();
 			Map<String,?> attr = getRequest().getAttributes();
 			Iterator<String> i = attr.keySet().iterator();
 			while( i.hasNext() ) {
 				String key = i.next();
 				Object o = attr.get(key);
-				obj.put(key, o);
+				
+				if(o instanceof Number){
+					obj.addProperty(key, (Number) o);
+				}
+				
+				if(o instanceof Boolean){
+					obj.addProperty(key, (Boolean) o);
+				}
+				
+				if(o instanceof String){
+					obj.addProperty(key, (String) o);
+				}
+				
+				
 			}
 
 			// Executing the service and returning
-			JSONObject response = broker.executeServerWS(ws, obj);
+			JsonObject response = broker.executeServerWS(ws, obj);
 			return response.toString();
 
 		} catch( DCMException e ) {

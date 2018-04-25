@@ -34,10 +34,11 @@ import org.dcm.services.model.FieldDescriptor;
 import org.dcm.services.model.RecordDescriptor;
 import org.dcm.services.model.SystemConfiguration;
 import org.dcm.services.model.WSDescriptor;
-import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.ibm.as400.access.AS400;
 import com.ibm.as400.access.ConnectionDroppedException;
 import com.ibm.as400.access.DataQueue;
@@ -116,15 +117,15 @@ public class WSBrokerImpl {
 					if( DQData != null ) {
 						String data = DQData.getString();
 						System.out.println(data);
-						JSONObject json = RecordHelper.toJson(inputFormat, data);
+						JsonObject json = RecordHelper.toJson(inputFormat, data);
 
-						String serviceName = json.getString("serviceName");
-						String key = json.getString("key");
-						String parameters = json.getString("parameters");
+						String serviceName = json.get("serviceName").getAsString();
+						String key = json.get("key").getAsString();
+						String parameters = json.get("parameters").getAsString();
 
 						log.log(Level.INFO, "Message received for service " + serviceName.trim() + " and key " + key.trim());
 						log.log(Level.INFO, "Parameters: " + parameters.trim());
-						JSONObject response = new JSONObject();
+						JsonObject response = new JsonObject();
 
 						try {
 							WSDescriptor ws;
@@ -143,16 +144,16 @@ public class WSBrokerImpl {
 
 							if( rcode == 0 || rcode == 200 ) {
 								String responseString = parseResponse(ws.getOutputRecordDescriptor(), stdout.toString());
-								response.put("responseCode", "WSR0200");
-								response.put("responseText", responseString);
+								response.addProperty("responseCode", "WSR0200");
+								response.addProperty("responseText", responseString);
 							} else {
-								response.put("responseCode", "WSR0500");
-								response.put("responseText", "");
+								response.addProperty("responseCode", "WSR0500");
+								response.addProperty("responseText", "");
 							}
 						} catch( Throwable e ) {
 							log.log(Level.SEVERE, e.getMessage(), e);
-							response.put("responseCode", "WSR0500");
-							response.put("responseText", e.getMessage());
+							response.addProperty("responseCode", "WSR0500");
+							response.addProperty("responseText", e.getMessage());
 						}
 
 						String outputData = RecordHelper.fromJson(outputFormat, response);
@@ -193,7 +194,7 @@ public class WSBrokerImpl {
 	 * @return The Received Response
 	 * @throws DCMException
 	 */
-	public JSONObject executeServerWS(WSDescriptor ws, JSONObject parameters) throws DCMException {
+	public JsonObject executeServerWS(WSDescriptor ws, JsonObject parameters) throws DCMException {
 
 		try {
 			KeyedDataQueue inputDQ = conn.getServerInputDataQueue();
@@ -203,11 +204,11 @@ public class WSBrokerImpl {
 			String key = UUID.randomUUID().toString();
 			String general = "*GENERAL  ";
 
-			JSONObject input = new JSONObject();
+			JsonObject input = new JsonObject();
 			String inputRecord = RecordHelper.fromJson(ws.getInputRecordDescriptor(), parameters);
-			input.put("serviceName", ws.getName());
-			input.put("key", key);
-			input.put("parameters", inputRecord);
+			input.addProperty("serviceName", ws.getName());
+			input.addProperty("key", key);
+			input.addProperty("parameters", inputRecord);
 			String inputData = RecordHelper.fromJson(inputFormat, input);
 
 			log.log(Level.INFO, "Sending request for key " + key.trim() + " to service " + ws.getName());
@@ -217,15 +218,15 @@ public class WSBrokerImpl {
 			DataQueueEntry DQData = outputDQ.read(key, -1, "EQ");
 			String data = DQData.getString();
 			System.out.println(data);
-			JSONObject json = RecordHelper.toJson(outputFormat, data);
+			JsonObject json = RecordHelper.toJson(outputFormat, data);
 
-			log.log(Level.INFO, "Message received for service " + ws.getName() + " and key " + key.trim() + ": " + json.getString("responseCode"));
-			log.log(Level.INFO, json.getString("responseText"));
+			log.log(Level.INFO, "Message received for service " + ws.getName() + " and key " + key.trim() + ": " + json.get("responseCode").getAsString());
+			log.log(Level.INFO, json.get("responseText").getAsString());
 
-			if(json.getString("responseCode").equals("WSR0200")) {
-				return RecordHelper.toJson(ws.getOutputRecordDescriptor(), json.getString("responseText"));
+			if(json.get("responseCode").getAsString().equals("WSR0200")) {
+				return RecordHelper.toJson(ws.getOutputRecordDescriptor(), json.get("responseText").getAsString());
 			} else {
-				throw DCMExceptionHelper.defaultException(json.getString("responseCode"), new Exception());
+				throw DCMExceptionHelper.defaultException(json.get("responseCode").getAsString(), new Exception());
 			}
 		} catch( Exception e ) {
 			if( e instanceof DCMException ) throw (DCMException)e;
@@ -698,7 +699,8 @@ public class WSBrokerImpl {
 	public String parseResponse(RecordDescriptor rd, String inputString) throws DCMException {
 
 		try {
-			JSONObject json = new JSONObject(inputString);
+			JsonParser jsonParser = new JsonParser();
+			JsonObject json = jsonParser.parse(inputString).getAsJsonObject();
 			String response = RecordHelper.fromJson(rd, json);
 			return response;
 		} catch( Exception e ) {
