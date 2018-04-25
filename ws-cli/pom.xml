@@ -46,6 +46,7 @@
 			<groupId>com.ciessa</groupId>
 			<artifactId>ws-services</artifactId>
 			<version>0.1</version>
+			<classifier>classes</classifier>
 		</dependency>
 	</dependencies>
 
